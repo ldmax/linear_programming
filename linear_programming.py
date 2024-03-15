@@ -4,14 +4,16 @@ using PuLP library
 """
 
 from pulp import LpMaximize, LpProblem, LpVariable, getSolver, LpStatus, value
+import pandas as pd
 
 
-def get_deposit_for_banks(n_bank, deposit_bounds, rates, total_money):
+def get_deposit_for_banks(n_bank, bank_names, deposit_bounds, rates, total_money):
     """Solve linear programming problem to get the deposit for each bank
     so that the total profit is maximized
 
     Args:
         n_bank: int, the number of banks
+        bank_names: bank names
         deposit_bounds: list of tuples, each tuple contains the lower and upper
                         limit of the deposit for each bank
         rates: list of float, the interest rate for each bank
@@ -26,7 +28,7 @@ def get_deposit_for_banks(n_bank, deposit_bounds, rates, total_money):
 
     solver = getSolver("PULP_CBC_CMD")
 
-    # 存款列表
+    # deposit list
     deposits = [
         LpVariable(
             f"x{i}",
@@ -37,58 +39,48 @@ def get_deposit_for_banks(n_bank, deposit_bounds, rates, total_money):
         for i in range(n_bank)
     ]
 
-    # 定义目标函数
+    # define target function
     model += sum(rates[i] * deposits[i] for i in range(n_bank))
 
-    # 定义约束条件
+    # constraints
     model += sum(deposits[i] for i in range(n_bank)) == total_money
 
-    # 求解
+    # solve
     results = model.solve(solver=solver)
 
-    # 打印结果
-    if LpStatus[results] == "Optimal":
-        print("The solution is optimal.")
+    # print result to file
+    with open("output.txt", "w+", encoding="utf-8") as f:
+        if LpStatus[results] == "Optimal":
+            f.write("The solution is optimal.\n")
 
-    print(f"Objective value: z = {value(model.objective)}")
-    for i in range(n_bank):
-        print(f"x{i+1} = {value(deposits[i])}")
-
-    return [value(deposits[i]) for i in range(n_bank)]
-
-
-def read_information_from_excel(path):
-    """Read information from Excel file
-    TODO: read Excel file from current path and retrieve information
-    """
-    pass 
+        f.write(f"Objective value: z = {value(model.objective)}\n")
+        for i in range(n_bank):
+            f.write(f"{bank_names[i]} = {value(deposits[i])}\n")
 
 
 def main():
-    pass
+    # Read Excel file in current path
+    wb = pd.ExcelFile("Parameters.xlsx")
+    sheet_names = wb.sheet_names
+    df_dict = {}
+
+    for sheet_name in sheet_names:
+        df_dict[sheet_name] = wb.parse(sheet_name=sheet_name)
+
+    info = df_dict[sheet_names[0]]
+
+    tt_money = df_dict[sheet_names[1]]
+
+    n_bank = info.shape[0]
+    deposit_bounds = list(
+        info[["Lower Bound", "Upper Bound"]].itertuples(index=False, name=None)
+    )
+    rates = info["Rate"].tolist()
+    total_money = tt_money["Total Money"].tolist()[0]
+
+    bank_names = info["Bank"].tolist()
+    get_deposit_for_banks(n_bank, bank_names, deposit_bounds, rates, total_money)
 
 
 if __name__ == "__main__":
-    n_bank = 10  # 银行家数
-
-    # 各家银行存款上下限
-    deposit_bounds = [
-        (1, 2),
-        (3, 10),
-        (5, 9),
-        (2.4, 14),
-        (1, 2),
-        (1, 2),
-        (1, 2),
-        (1, 2),
-        (1, 2),
-        (1, 2),
-    ]
-
-    # 各家银行存款利率
-    rates = [0.1, 0.07, 0.05, 0.03, 0.02, 0.01, 0.01, 0.01, 0.01, 0.01]
-
-    # 总存款
-    total_money = 34
-
-    deposits = get_deposit_for_banks(n_bank, deposit_bounds, rates, total_money)
+    main()
